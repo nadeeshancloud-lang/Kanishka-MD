@@ -11,7 +11,6 @@ const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const config = require('./settings');
 
-// Plugins ලෝඩ් කිරීම (Dynamic Plugin Loader)
 const commands = new Map();
 const pluginsPath = path.join(__dirname, 'plugins');
 
@@ -27,6 +26,7 @@ if (fs.existsSync(pluginsPath)) {
 }
 
 async function startKanishkaBot() {
+    console.log("🚀 Kanishka-MD Pro ආරම්භ වෙමින් පවතී...");
     const { state, saveCreds } = await useMultiFileAuthState('./session');
     const { version } = await fetchLatestBaileysVersion();
 
@@ -42,26 +42,21 @@ async function startKanishkaBot() {
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        // 1. QR Code එක ටර්මිනල් එකේ පෙන්වීම
         if (qr) {
             console.log("\n👇 පහත QR Code එක WhatsApp මගින් Scan කරන්න:\n");
             qrcode.generate(qr, { small: true });
         }
 
-        // 2. සම්බන්ධතාවය සාර්ථක වූ විට
         if (connection === 'open') {
-            console.log('✅ KANISHKA-MD බොට් සාර්ථකව සම්බන්ධ විය!');
-        } 
-        // 3. සම්බන්ධතාවය බිඳ වැටුණු විට
-        else if (connection === 'close') {
+            console.log('✅ Kanishka-MD Pro සාර්ථකව Connect විය!');
+        } else if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            console.log(`සම්බන්ධතාවය බිඳ වැටුණි (Code: ${statusCode}), නැවත සම්බන්ධ වෙමින්...`, shouldReconnect);
+            console.log(`🔴 Connection එක විසන්ධි විය. Status Code: ${statusCode} Reconnecting: ${shouldReconnect}`);
             if (shouldReconnect) startKanishkaBot();
         }
     });
 
-    // 4. Pairing Code ලබා දීම (තවම Link වී නැතිනම් පමණි)
     if (!sock.authState.creds.registered && config.ownerNumber) {
         setTimeout(async () => {
             try {
@@ -74,9 +69,9 @@ async function startKanishkaBot() {
                     console.log(`==============================================\n`);
                 }
             } catch (err) {
-                // Connection errors මඟ හැරීමට
+                console.log("Pairing code error:", err.message);
             }
-        }, 8000);
+        }, 6000);
     }
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
