@@ -8,9 +8,10 @@ const {
 const fs = require('fs');
 const path = require('path');
 const pino = require('pino');
+const qrcode = require('qrcode-terminal');
 const config = require('./settings');
 
-// Plugins රෝඩ් කිරීම (Dynamic Plugin Loader)
+// Plugins ලෝඩ් කිරීම (Dynamic Plugin Loader)
 const commands = new Map();
 const pluginsPath = path.join(__dirname, 'plugins');
 
@@ -32,22 +33,51 @@ async function startKanishkaBot() {
     const sock = makeWASocket({
         version,
         logger: pino({ level: 'silent' }),
-        printQRInTerminal: true,
-        auth: state
+        auth: state,
+        browser: ["Ubuntu", "Chrome", "20.0.04"]
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update;
-        if (connection === 'close') {
-            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('සම්බන්ධතාවය බිඳ වැටුණි, නැවත සම්බන්ධ වෙමින්...', shouldReconnect);
-            if (shouldReconnect) startKanishkaBot();
-        } else if (connection === 'open') {
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        // 1. QR Code එක ටර්මිනල් එකේ පෙන්වීම
+        if (qr) {
+            console.log("\n👇 පහත QR Code එක WhatsApp මගින් Scan කරන්න:\n");
+            qrcode.generate(qr, { small: true });
+        }
+
+        // 2. සම්බන්ධතාවය සාර්ථක වූ විට
+        if (connection === 'open') {
             console.log('✅ KANISHKA-MD බොට් සාර්ථකව සම්බන්ධ විය!');
+        } 
+        // 3. සම්බන්ධතාවය බිඳ වැටුණු විට
+        else if (connection === 'close') {
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+            console.log(`සම්බන්ධතාවය බිඳ වැටුණි (Code: ${statusCode}), නැවත සම්බන්ධ වෙමින්...`, shouldReconnect);
+            if (shouldReconnect) startKanishkaBot();
         }
     });
+
+    // 4. Pairing Code ලබා දීම (තවම Link වී නැතිනම් පමණි)
+    if (!sock.authState.creds.registered && config.ownerNumber) {
+        setTimeout(async () => {
+            try {
+                if (!sock.authState.creds.registered) {
+                    let code = await sock.requestPairingCode(config.ownerNumber);
+                    code = code?.match(/.{1,4}/g)?.join("-") || code;
+                    console.log(`\n==============================================`);
+                    console.log(`🔢 ඔයාගේ PAIRING CODE එක: ${code}`);
+                    console.log(`(WhatsApp -> Linked Devices -> Link with phone number යොදන්න)`);
+                    console.log(`==============================================\n`);
+                }
+            } catch (err) {
+                // Connection errors මඟ හැරීමට
+            }
+        }, 8000);
+    }
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
